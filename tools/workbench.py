@@ -43,7 +43,20 @@ def context(root, slug):
     return {'sources': result, 'characters': total}
 
 
-def check(root, response):
+def check(root, response, expected_project=None):
+    project_dir = None
+    if expected_project is not None:
+        if not isinstance(expected_project, str) or not re.fullmatch(
+            r'[a-z0-9]+(?:-[a-z0-9]+)*', expected_project
+        ):
+            raise ValueError('Invalid project slug')
+        root = Path(root).resolve()
+        projects_dir = (root / 'work' / 'projects').resolve()
+        project_dir = (projects_dir / expected_project).resolve()
+        # A project directory must itself be a direct child of the projects
+        # directory. This rejects symlink aliases to another project.
+        if project_dir.parent != projects_dir or project_dir.name != expected_project:
+            raise ValueError('Invalid project directory')
     errors = []
     if not isinstance(response, dict):
         return ['Response must be an object']
@@ -63,6 +76,8 @@ def check(root, response):
             continue
         try:
             source = allowed(root, claim['source'])
+            if project_dir is not None and not source.is_relative_to(project_dir):
+                raise ValueError('Source belongs to another project')
             if source.stat().st_size > 64_000:
                 raise ValueError('Source exceeds budget')
             if claim['quote'] not in source.read_text(encoding='utf-8'):
@@ -80,15 +95,18 @@ def main():
     parser.add_argument('command', choices=['context', 'check'])
     parser.add_argument('vault')
     parser.add_argument('target')
+    parser.add_argument('--project', help='Require check evidence to come from this project slug')
     args = parser.parse_args()
     started = time.perf_counter()
     try:
         if args.command == 'context':
+            if args.project is not None:
+                raise ValueError('--project is only valid with the check command')
             result = context(args.vault, args.target)
             status = 0
         else:
             response = json.loads(Path(args.target).read_text(encoding='utf-8'))
-            errors = check(args.vault, response)
+            errors = check(args.vault, response, expected_project=args.project)
             result = {'passed': not errors, 'errors': errors}
             status = int(bool(errors))
     except (ValueError, OSError) as exc:

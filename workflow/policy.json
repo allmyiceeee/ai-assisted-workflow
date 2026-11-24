@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "runtime": "Codex native subagents",
+  "max_correction_rounds": 2,
+  "roles": {
+    "executor": {"agent": "workflow-executor", "model": "gpt-6-luna", "effort": "medium"},
+    "reviewer": {"agent": "workflow-reviewer", "model": "gpt-6.2-astra", "effort": "high"}
+  },
+  "routes": {
+    "local_low_risk": "executor_only",
+    "bounded_code_change": "executor_then_reviewer",
+    "ambiguous_or_high_impact": "strong_executor_then_independent_review"
+  },
+  "stop_conditions": ["checks_fail_after_limit", "blocking_findings_after_limit", "missing_requirements", "model_unavailable"],
+  "human_gate": ["merge", "deploy"],
+  "note": "Coordinator reads this policy; it is not an executable Python state machine. Strong-executor override must be explicit in the request."
+}
